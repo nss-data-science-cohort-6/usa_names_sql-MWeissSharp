@@ -97,8 +97,98 @@ HAVING COUNT(DISTINCT gender) = 2
 ORDER BY abs_difference;
 --Santana is the closest to evenly split with just 93 more female uses than male
 
--- 	10. Which names have been among the top 25 most popular names for their gender in every single year contained in the names table? Hint: you may have to combine a window function and a subquery to answer this question.
+-- 	10. Which names have been among the top 25 most popular names for their gender in every single year contained in the names table? Hint: you may have to combine a window function and a subquery to answer this question.[]
+SELECT name,
+		COUNT(name) AS num_top_years
+FROM (SELECT name,
+				year,
+				gender,
+				num_registered,
+				RANK() OVER(PARTITION BY year, gender ORDER BY num_registered DESC) AS ranks
+		FROM names
+		ORDER BY year, gender, ranks) AS ranked
+WHERE ranks <= 25
+GROUP BY name
+HAVING COUNT(name) = 2018-1879;
+-- Joseph, William, and James are the only names that have been in the top 25 for all years of the data set
 
 -- 	11. Find the name that had the biggest gap between years that it was used. 
+SELECT name,
+		year,
+		LAG(year) OVER(PARTITION BY name ORDER BY year) AS last_year_used_prev,
+		year - LAG(year) OVER(PARTITION BY name ORDER BY year) AS dif_btw_years
+FROM names
+ORDER BY dif_btw_years DESC NULLS LAST
+LIMIT 5;
+-- Ignoring gender, Franc was used for 5 girls in 1883 than not again until 2001 when it was used for 5 boys, a gap of 118 years
+SELECT name,
+		gender,
+		year,
+		LAG(year) OVER(PARTITION BY name, gender ORDER BY year) AS last_year_used_prev,
+		year - LAG(year) OVER(PARTITION BY name, gender ORDER BY year) AS dif_btw_years
+FROM names
+ORDER BY dif_btw_years DESC NULLS LAST
+LIMIT 5;
+-- Looking at names that were used for the same gender, Levy for a girl had a gap of 119 years and Rasmus for a boy had a gap of 115 years
 
--- 	12. Have there been any names that were not used in the first year of the dataset (1880) but which made it to be the most-used name for its gender in some year? Difficult follow-up: What is the shortest amount of time that a name has gone from not being used at all to being the number one used name for its gender in a year?
+-- 	12. Have there been any names that were not used in the first year of the dataset (1880) but which made it to be the most-used name for its gender in some year? 
+SELECT DISTINCT name
+FROM (SELECT name,
+				year,
+				gender,
+				num_registered,
+				RANK() OVER(PARTITION BY year, gender ORDER BY num_registered DESC) AS ranks
+		FROM names
+		ORDER BY year, gender, ranks) AS ranked
+WHERE ranks = 1
+	AND name NOT IN (SELECT name
+					 FROM names
+					 WHERE year = 1880);
+-- Jennifer, Liam, Lisa were not used in 1880 but made it to the top used name for a specific gender
+
+-- Difficult follow-up: What is the shortest amount of time that a name has gone from not being used at all to being the number one used name for its gender in a year?
+-- This is not the correct interpretation of the question, but keeping the query
+SELECT name,
+		gender,
+		MIN(year) AS first_top_name_year,
+		first_year,
+		MIN(year) - first_year AS yrs_to_top
+FROM (SELECT name,
+				year,
+				gender,
+				RANK() OVER(PARTITION BY year, gender ORDER BY num_registered DESC) AS ranks,
+	  			MIN(year) OVER(PARTITION BY name, gender) AS first_year
+		FROM names
+		ORDER BY year, gender, ranks) AS ranked
+WHERE ranks = 1
+	AND first_year <> 1880
+GROUP BY name, gender, first_year
+ORDER BY yrs_to_top;
+-- Correct interpretation attempts below
+SELECT name,
+		gender,
+		year AS num_one_year
+FROM (SELECT name,
+				year,
+				gender,
+				RANK() OVER(PARTITION BY year, gender ORDER BY num_registered DESC) AS ranks
+		FROM names
+		ORDER BY year, gender, ranks) AS ranked
+WHERE ranks = 1;
+
+SELECT name,
+		year,
+		gender,
+		RANK() OVER(PARTITION BY year, gender ORDER BY num_registered DESC) AS ranks
+FROM names
+WHERE year <> 1880
+	AND name IN (SELECT name
+				FROM (SELECT name,
+								year,
+								gender,
+								RANK() OVER(PARTITION BY year, gender 
+											ORDER BY num_registered DESC) AS ranks
+						FROM names
+						ORDER BY year, gender, ranks) AS ranked
+				WHERE ranks = 1)
+
